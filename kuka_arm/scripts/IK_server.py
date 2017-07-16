@@ -38,15 +38,6 @@ def handle_calculate_IK(req):
             q1,q2,q3,q4,q5,q6,q7= symbols('q1:8')
             d1,d2,d3,d4,d5,d6,d7= symbols('d1:8')
 
-            # IK code starts here
-            joint_trajectory_point = JointTrajectoryPoint()
-
-            # Define DH param symbols
-            alpha0,alpha1,alpha2,alpha3,alpha4,alpha5,alpha6=symbols('alpha0:7')
-            a0,a1,a2,a3,a4,a5,a6=symbols('a0:7')
-            # Joint angle symbols
-            q1,q2,q3,q4,q5,q6,q7= symbols('q1:8')
-            d1,d2,d3,d4,d5,d6,d7= symbols('d1:8')
             # Modified DH params
             s = {alpha0:     0, a0:      0, d1:  0.75,
                  alpha1: -pi/2, a1:   0.35, d2:     0, q2: q2-pi/2,
@@ -141,41 +132,45 @@ def handle_calculate_IK(req):
                      [0],
                      [0]])
 
-            Ryaw=Matrix([[cos(yaw),-sin(yaw),0,0],
-                      [sin(yaw),cos(yaw),0,0],
-                      [0,0,1,0],
-                      [0,0,0,1]])
+	        R_roll = Matrix([[  1,	    0,	          0],
+			       [	0,  cos(roll),   -sin(roll)],
+			       [	0,  sin(roll),    cos(roll)]])
+	        R_pitch = Matrix([[  cos(pitch),   0, sin(pitch)],
+			       [		  0,   1,          0],
+			       [	-sin(pitch),   0, cos(pitch)]])
+	        R_yaw = Matrix([[  cos(yaw), -sin(yaw), 	0],
+			       [   sin(yaw),  cos(yaw), 	0],
+			       [	       0,   	 0,     1]])
 
-            Rpitch=Matrix([[cos(pitch),0,sin(pitch),0],
-                      [0,1,0,0],
-                      [-sin(pitch),0,cos(pitch),0],
-                      [0,0,0,1]])
+            Rrpy = simplify(R_yaw * R_pitch * R_roll)
+            Rrpy = simplify(Rrpy * R_corr[0:3,0:3])
 
-            Rroll=Matrix([[1,0,0,0],
-                      [0,cos(roll),-sin(roll),0],
-                      [0,sin(roll),cos(roll),0],
-                      [0,0,0,1]])
+            nx = Rrpy[0, 2]
+    	    ny = Rrpy[1, 2]
+    	    nz = Rrpy[2, 2]
 
-            R0_6 = Ryaw * Rpitch * Rroll
-            W = P - R0_6 * D
-            W = W.subs(S)
-            W_x = W[0]
-            W_y = W[1]
-            W_z = W[2]
+   	        d6 = s['d6']
+    	    l =  s['d7']
+
+            # calculate  wrist center x, y, z position
+    	    Wx = px - (d6 + l) * nx
+    	    Wy = py - (d6 + l) * ny
+    	    Wz = pz - (d6 + l) * nz
 
             # Calculate joint angles using Geometric IK method
             theta1 = atan2(wy, wx) # Simple trig, using x,y coords
 
             # Find 'r' of origin(O) to wc
-            r = sqrt(wx**2 + wy**2)
+            r = sqrt(wx**2 + wy**2) - s['a1']
 
             # Calculate dist J2 - wc (c) and angle from horizontal to wc (C)
-            a = r - a1
-            b = wz - d1
-            c = sqrt(a**2 + b**2)
+
+    	    a = sqrt(s['d4']**2 + s['a3']**2)
+    	    b = s['a2']
+    	    c = sqrt(r**2+s**2)
 
             # Use cosine rule to find theta3 and allow for offset
-            costheta3 = (a2**2 + d4**2 - c**2)/(2 * a2 * d4)
+            costheta3 = (c**2 + b**2 - a**2)/(2 * c * b)
             theta3 = atan2(costheta3, sqrt(1 - costheta3**2))
 
             # Find elevation angle from J2 to J5
